@@ -3,6 +3,7 @@
 > The M2 companion to M1's `UNDERSTANDING.md`. Cross-referenced from `Assignment 4.docx`,
 > the M1 deliverables, `docs/glossary.md`, and the instructor's anomaly checkbook
 > (`.private/sir_checkbook_dump.txt`). Read this first, then your task file in `docs/tasks/`.
+> For a concrete trace of one anomaly through all 7 steps, see [`docs/worked_example_A1.md`](docs/worked_example_A1.md).
 
 ---
 
