@@ -1,0 +1,39 @@
+# NexaMart M2 — repo ignores
+
+# LEAD'S PRIVATE FOLDER — never commit anomaly answers to shared repo
+.private/
+
+# Python / Jupyter scratch
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Databricks export artefacts
+*.dbc
+
+# Credentials — should never appear, but defence in depth
+*.env
+.env.local
+secrets.json
+*credentials*.json
+
+# Source data files are intentionally committed at `data/nexamart_operations.db`
+# (private repo, ~59 MB, single source of truth for the team).
+# Only stray sibling .db / .sqlite files (e.g. local scratch copies) are excluded:
+/*.db
+/*.sqlite
+/*.sqlite3
+!/data/nexamart_operations.db
