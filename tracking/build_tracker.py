@@ -308,7 +308,7 @@ def build_xlsx(path, tasks, kpis):
         ("Milestone", "M2 of 2 — Validate, Fix, Analyse, Conclude"),
         ("Submission", "Single ZIP: nexamart_m2_group_[N].zip"),
         ("Campaign window", "8-28 Aug 2024 (baseline 1 Mar-31 Jul; ramp 1-7 Aug; post 29 Aug-14 Sep)"),
-        ("Repo / branch", "github.com/ARIF-rb/nexamart-m2 — working branch: master"),
+        ("Repo / branch", "github.com/ARIF-rb/nexamart-m2 — working branch: main"),
         ("Deadline", "Day 10 EOD"),
     ]
     r = 3
