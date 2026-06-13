@@ -24,25 +24,33 @@ alternatives, **and the quantified impact had the alternative been chosen** (bri
 
 Cross-references: detection = `sql/anomaly_discovery.sql`; resolution code = `notebooks/05_anomaly_resolution.ipynb`; per-anomaly docs = `sql/anomaly_resolution.sql`.
 
+**Detection verified (run 14 Jun 2026 as `NEXAMART_ENGINEER` against live `NEXAMART_SILVER`).** Before-counts
+matched the expected fingerprints **exactly** for: **A1=94, A4=449, A5=5, A6=8, A7=10, A11=178, A13=3 rings,
+A14=18 strict, A16=7, B1=126** (✓ live). A9 was retargeted from `silver_product_master` to the cross-source
+`silver_ts_seller_listings` case (the mismatch is catalogue-vs-listing, not a within-catalogue duplicate). The
+remaining predicates (A2/A8/A10/A12/A15/B3/B5/B7/B8) were ported to live columns — note the member-built Silver
+tables use base column names (`created_at`, `snapshot_date`), not the lead-built `_parsed` variants — and are
+pending a clean consolidated re-run.
+
 ### Category A
-| ID | Detection | Root cause | Fix (method) | Before → After | Business impact | Owner |
+| ID | Detection (live Silver predicate) | Root cause | Fix (method) | Before → After | Business impact | Owner |
 |---|---|---|---|---|---|---|
-| A1 | | | ZEROED_CANCELLED_REVENUE | 94 → 0 | ₹6.15 Cr over-count removed | M5 |
-| A2 | | | FLAGGED_REVERSAL_REQUIRED | 27 → 0 | ₹1.08 Cr reversal liability | M5 |
-| A3 | | | NORMALISED_TAX_EXCLUSIVE | schema-wide | ₹16.25 Cr comparable basis | M5 |
-| A4 | | | RELABELLED_ESTIMATED_GMV | 449 → 0 confirmed | ₹1.72 Cr moved to ESTIMATED | M6 |
-| A5 | | | CORRECTED_ATP_TO_ZERO | 5 → 0 | oversell risk removed | Lead |
-| A6 | | | CORRECTED_ATP_TO_ZERO | 8 → 0 | stockout analysis fixed | M4 |
-| A7 | | | ZEROED_RESTOCK_PRE_INSPECTION | 10 → 0 | ATP inflation removed | Lead |
-| A8 | | | RECONSTRUCTED_SNAPSHOT | ~21 reconstructed | allocation accuracy (1–7 Aug) | Lead |
-| A9 | | | APPLIED_CANONICAL_PRODUCT | 1 → 0 | category revenue corrected | M3 |
-| A10 | | | CORRECTED_CONDITION_OPEN_BOX | 12 → 0 | price premium quantified | M4 |
-| A11 | | | REKEYED_GUEST_BUCKET | 178 → 0 | customer profile de-collided | M2 |
-| A12 | | | LINKED_RELISTING_EXCLUDED | 3 pairs | GMV double-count removed | Lead |
-| A13 | | | FLAGGED_FRAUD_RING | rings flagged | trust & safety | M6 |
-| A14 | | | CORRECTED_DELIVERY_TS / ESCALATED_MANUAL_REVIEW | 18 (>72h escalated) | on-time rate corrected | Lead |
-| A15 | | | SET_VERIFIED_PURCHASE_FALSE | 25 → 0 verified | review-score KPI corrected | M6 |
-| A16 | | | DEDUPED_CANONICAL_CASE | 7 → deduped | complaint volume corrected | M6 |
+| A1 | `order_status='CANCELLED' AND subtotal_excl_tax>0` ✓94 | cancelled orders left revenue on the line | ZEROED_CANCELLED_REVENUE | 94 → 0 | ₹6.15 Cr over-count removed | M5 |
+| A2 | captured PG txn (`captured_ts` not null) after earliest CANCELLED status | capture fired post-cancel | FLAGGED_REVERSAL_REQUIRED | 27 → 0 | ₹1.08 Cr reversal liability | M5 |
+| A3 | POS incl-tax vs EC excl-tax basis differ | mixed tax bases summed naively | NORMALISED_TAX_EXCLUSIVE | schema-wide | ₹16.25 Cr comparable basis | M5 |
+| A4 | `event_type_code='SELLER_SOLD'` ✓449 | seller-sold counted as confirmed revenue | RELABELLED_ESTIMATED_GMV | 449 → 0 confirmed | ₹1.72 Cr moved to ESTIMATED | M6 |
+| A5 | `atp_qty>0 AND physical_qty=0` ✓5 | ATP not decremented to physical | CORRECTED_ATP_TO_ZERO | 5 → 0 | oversell risk removed | Lead |
+| A6 | `sellable_qty<0 OR physical_qty<0` ✓8 | negative inventory written | CORRECTED_ATP_TO_ZERO | 8 → 0 | stockout analysis fixed | M4 |
+| A7 | `inspection_status='PENDING' AND restocked_qty>0` ✓10 | restock before inspection | ZEROED_RESTOCK_PRE_INSPECTION | 10 → 0 | ATP inflation removed | Lead |
+| A8 | stores 3/7/12 × (1–7 Aug) absent from snapshots | snapshots not captured in ramp-up | RECONSTRUCTED_SNAPSHOT | ~21 reconstructed | allocation accuracy (1–7 Aug) | Lead |
+| A9 | `silver_ts_seller_listings`: listing 42 / NX-TECH-0001 catalogue mismatch | seller feed contradicts catalogue | APPLIED_CANONICAL_PRODUCT | 1 → 0 | category revenue corrected | M3 |
+| A10 | `condition_on_receipt='OPENED' AND restocked_as_condition='NEW'` | open-box restocked as NEW | CORRECTED_CONDITION_OPEN_BOX | 12 → 0 | price premium quantified | M4 |
+| A11 | `customer_id='9999'` ✓178 | guest placeholder collides w/ real loyalty | REKEYED_GUEST_BUCKET | 178 → 0 | customer profile de-collided | M2 |
+| A12 | self-join `image_hash`+seller, prior SOLD/EXPIRED, ACTIVE relist | listing relisted after sold | LINKED_RELISTING_EXCLUDED | 3 pairs | GMV double-count removed | Lead |
+| A13 | `image_hash` shared by ≥2 seller accounts ✓3 rings | coordinated listing ring | FLAGGED_FRAUD_RING | rings flagged | trust & safety | M6 |
+| A14 | `delivered_ts<pickup_ts` (strict) ✓18 | courier clock drift | CORRECTED_DELIVERY_TS / ESCALATED_MANUAL_REVIEW | 18 (>72h escalated) | on-time rate corrected | Lead |
+| A15 | `days_post_delivery<0` | review before delivery | SET_VERIFIED_PURCHASE_FALSE | 25 → 0 verified | review-score KPI corrected | M6 |
+| A16 | `is_duplicate_flag=TRUE` ✓7 | same complaint via many channels | DEDUPED_CANONICAL_CASE | 7 → deduped | complaint volume corrected | M6 |
 
 ### Category B
 | ID | Ambiguity | Chosen interpretation | Quantified alternative | Owner |
