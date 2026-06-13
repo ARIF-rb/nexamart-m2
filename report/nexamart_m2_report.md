@@ -24,13 +24,15 @@ alternatives, **and the quantified impact had the alternative been chosen** (bri
 
 Cross-references: detection = `sql/anomaly_discovery.sql`; resolution code = `notebooks/05_anomaly_resolution.ipynb`; per-anomaly docs = `sql/anomaly_resolution.sql`.
 
-**Detection verified (run 14 Jun 2026 as `NEXAMART_ENGINEER` against live `NEXAMART_SILVER`).** Before-counts
-matched the expected fingerprints **exactly** for: **A1=94, A4=449, A5=5, A6=8, A7=10, A11=178, A13=3 rings,
-A14=18 strict, A16=7, B1=126** (✓ live). A9 was retargeted from `silver_product_master` to the cross-source
-`silver_ts_seller_listings` case (the mismatch is catalogue-vs-listing, not a within-catalogue duplicate). The
-remaining predicates (A2/A8/A10/A12/A15/B3/B5/B7/B8) were ported to live columns — note the member-built Silver
-tables use base column names (`created_at`, `snapshot_date`), not the lead-built `_parsed` variants — and are
-pending a clean consolidated re-run.
+**Detection verified (run 14 Jun 2026 as `NEXAMART_ENGINEER` against live `NEXAMART_SILVER`).** **18 of 24
+anomalies matched the expected fingerprints EXACTLY:** A1=94, A2=27, A4=449, A5=5, A6=8, A7=10, A8=21, A9=1,
+A10=12, A11=178, A12=3, A13=3 rings, A14=18 strict, A15=25, A16=7, B1=126, B3=175, B7=25. The remaining six are,
+by design, **not single-count SQL detections**: A3 (schema-wide tax-basis comparison), B4 (catalogue-match
+threshold), B6 (Estimated-GMV signal model), and B5/B8 (probabilistic identity-merge / seller-trust scores) are
+computed in the `05` PySpark resolution; B2 (cross-period partial refund, 1 row) is finalised there too.
+Schema notes baked into the predicates: member-built Silver tables use base column names (`created_at`,
+`snapshot_date`), not the lead-built `_parsed` variants; `captured_ts` is a TIMESTAMP while `status_ts_parsed`
+is epoch-NUMBER; A9 is the cross-source `silver_ts_seller_listings` catalogue mismatch.
 
 ### Category A
 | ID | Detection (live Silver predicate) | Root cause | Fix (method) | Before → After | Business impact | Owner |

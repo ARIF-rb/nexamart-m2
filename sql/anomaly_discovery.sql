@@ -30,8 +30,9 @@ WHERE order_status = 'CANCELLED' AND subtotal_excl_tax > 0;
 -- A2 — PAYMENT_AFTER_CANCEL  (silver_pg_transactions x cancel ts)  [expect 27 total / 26 strictly after]
 -- A "captured" payment = captured_ts IS NOT NULL (epoch seconds). Compare to the order's
 -- earliest CANCELLED status timestamp (status_ts_parsed -> epoch).
+-- captured_ts is TIMESTAMP; status_ts_parsed (cancelled_ts) is epoch NUMBER -> compare in epoch.
 SELECT COUNT(*) AS affected_rows,
-       COUNT_IF(p.captured_ts > DATE_PART('epoch_second', c.cancelled_ts)) AS strictly_after
+       COUNT_IF(DATE_PART('epoch_second', p.captured_ts) > c.cancelled_ts) AS strictly_after
 FROM silver_pg_transactions p
 JOIN silver_ec_orders o
   ON o.order_number = p.order_ref
@@ -77,7 +78,8 @@ WHERE inspection_status = 'PENDING' AND restocked_qty > 0;
 WITH affected AS (SELECT column1::string AS store_id FROM VALUES ('3'),('7'),('12')),
 cal AS (SELECT DATEADD(day, SEQ4(), DATE '2024-08-01') AS d FROM TABLE(GENERATOR(ROWCOUNT => 7))),
 present AS (
-  SELECT DISTINCT store_id::string AS store_id, TRY_TO_DATE(snapshot_date, 'DD/MM/YYYY') AS d
+  -- snapshot_date is already a DATE in Silver
+  SELECT DISTINCT store_id::string AS store_id, snapshot_date AS d
   FROM silver_si_inventory_snapshots
 )
 SELECT COUNT(*) AS missing_store_days
