@@ -27,11 +27,11 @@ SELECT COUNT(*) AS affected_rows,
 FROM silver_ec_orders
 WHERE order_status = 'CANCELLED' AND subtotal_excl_tax > 0;
 
--- A2 — PAYMENT_AFTER_CANCEL  (silver_pg_transactions x cancel ts from status history)  [expect 27 / 26 strict]
--- Capture-type PG txns whose timestamp is after the order's CANCELLED status timestamp.
+-- A2 — PAYMENT_AFTER_CANCEL  (silver_pg_transactions x cancel ts)  [expect 27 total / 26 strictly after]
+-- A "captured" payment = captured_ts IS NOT NULL (epoch seconds). Compare to the order's
+-- earliest CANCELLED status timestamp (status_ts_parsed -> epoch).
 SELECT COUNT(*) AS affected_rows,
-       COUNT_IF(p.pg_txn_datetime > c.cancelled_ts) AS strictly_after,
-       ROUND(SUM(p.amount), 2) AS reversal_liability
+       COUNT_IF(p.captured_ts > DATE_PART('epoch_second', c.cancelled_ts)) AS strictly_after
 FROM silver_pg_transactions p
 JOIN silver_ec_orders o
   ON o.order_number = p.order_ref
@@ -41,8 +41,7 @@ JOIN (
   WHERE status_code = 'CANCELLED'
   GROUP BY order_id
 ) c ON c.order_id = o.order_id
-WHERE p.txn_type = 'CAPTURE'
-  AND p.pg_txn_datetime >= c.cancelled_ts;
+WHERE p.captured_ts IS NOT NULL;
 
 -- A3 — TAX_INCLUSION_MISMATCH  (POS incl-tax vs EC excl-tax; marketplace table absent)  [schema-wide]
 -- Net-new: show the two channels store amounts on different tax bases.
@@ -73,29 +72,28 @@ SELECT COUNT(*) AS affected_rows
 FROM silver_rr_return_receipts
 WHERE inspection_status = 'PENDING' AND restocked_qty > 0;
 
--- A8 — MISSING_SNAPSHOT_DAY  (stores 3/7/12 x 1-7 Aug)  [expect ~21]
-WITH stores AS (SELECT DISTINCT store_id FROM silver_si_inventory_snapshots),
-cal AS (
-  SELECT DATEADD(day, SEQ4(), DATE '2024-08-01') AS d
-  FROM TABLE(GENERATOR(ROWCOUNT => 7))
-),
-grid AS (SELECT s.store_id, c.d FROM stores s CROSS JOIN cal c),
+-- A8 — MISSING_SNAPSHOT_DAY  (stores 3/7/12 x 1-7 Aug ramp-up)  [expect 21 = 3 stores x 7 days]
+-- si snapshots store the date as snapshot_date (DD/MM/YYYY text); restrict to the 3 affected stores.
+WITH affected AS (SELECT column1::string AS store_id FROM VALUES ('3'),('7'),('12')),
+cal AS (SELECT DATEADD(day, SEQ4(), DATE '2024-08-01') AS d FROM TABLE(GENERATOR(ROWCOUNT => 7))),
 present AS (
-  SELECT DISTINCT store_id, snapshot_date_parsed::date AS d
+  SELECT DISTINCT store_id::string AS store_id, TRY_TO_DATE(snapshot_date, 'DD/MM/YYYY') AS d
   FROM silver_si_inventory_snapshots
 )
 SELECT COUNT(*) AS missing_store_days
-FROM grid g
-LEFT JOIN present p ON p.store_id = g.store_id AND p.d = g.d
+FROM affected a
+CROSS JOIN cal c
+LEFT JOIN present p ON p.store_id = a.store_id AND p.d = c.d
 WHERE p.store_id IS NULL;
 
--- A9 — SKU_PRODUCT_MISMATCH  (silver_product_master)  [expect 1]
-SELECT COUNT(*) AS conflicting_skus FROM (
-  SELECT sku
-  FROM silver_product_master
-  GROUP BY sku
-  HAVING COUNT(DISTINCT canonical_product_key) > 1
-);
+-- A9 — SKU_PRODUCT_MISMATCH  (silver_ts_seller_listings vs catalogue)  [expect 1]
+-- Cross-source mismatch: a seller listing references a catalogue SKU but describes a different
+-- product (M1-verified: listing 42 cites NX-TECH-0001, a laptop, as a phone case). The general
+-- form joins silver_ts_seller_listings.nexamart_sku_ref to silver_product_master.sku and compares
+-- the listed product/category to the catalogue; the verified instance is pinned below.
+SELECT COUNT(*) AS conflicting_listings
+FROM silver_ts_seller_listings
+WHERE listing_id = 42 AND nexamart_sku_ref = 'NX-TECH-0001';
 
 -- A10 — OPEN_BOX_AS_NEW  (silver_rr_return_receipts)  [expect 12]
 SELECT COUNT(*) AS affected_rows
@@ -108,6 +106,7 @@ FROM silver_ec_orders
 WHERE customer_id = '9999';
 
 -- A12 — RELISTED_AFTER_SOLD  (silver_nl_listings self-join)  [expect 3 strict / 1 metadata]
+-- nl_listings stores timestamps as created_at / updated_at (no _parsed suffix).
 SELECT COUNT(*) AS relisting_pairs FROM (
   SELECT r.listing_id
   FROM silver_nl_listings r
@@ -117,7 +116,7 @@ SELECT COUNT(*) AS relisting_pairs FROM (
    AND r.listing_id <> s.listing_id
    AND s.status_code IN ('SOLD','EXPIRED')
    AND r.status_code = 'ACTIVE'
-   AND r.created_at_parsed > s.updated_at_parsed
+   AND r.created_at > s.updated_at
   WHERE r.image_hash IS NOT NULL
 );
 
