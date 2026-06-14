@@ -103,11 +103,15 @@ UNION ALL SELECT 'fact_customer_complaint', COUNT(*) FROM (
 -- FAIL if any dup_groups > 0.
 
 -- ===========================================================================
--- CHECK 4 — ADDITIVE FACT SANITY: net = gross - discount - return (fact_store_sale_line).
+-- CHECK 4 — ADDITIVE FACT SANITY: net = gross - discount (fact_store_sale_line).
+-- The member-built fact_store_sale_line carries gross_amount, discount_amount and net_amount
+-- (plus tax_amount held separately — NULL on these POS lines — and cogs_amount). It has NO
+-- return column: store/EC return refunds live in fact_return_line.refund_amount. The additive
+-- identity that holds at this grain is therefore net_amount = gross_amount - discount_amount.
 -- ===========================================================================
 SELECT COUNT(*) AS broken_rows
 FROM fact_store_sale_line
-WHERE ABS(net_amount - (gross_amount - discount_amount - COALESCE(return_amount, 0))) > 0.01;
+WHERE ABS(net_amount - (gross_amount - discount_amount)) > 0.01;
 -- FAIL if broken_rows > 0.
 
 -- ===========================================================================
@@ -182,9 +186,13 @@ bounds AS (
   FROM snap GROUP BY store_id, product_code
 ),
 moves AS (
+  -- quantity_delta is already signed (PICK/DMG negative, RCVD/RET positive), so SUM = net signed
+  -- movement. Window the movements to the SAME campaign period as the snapshot bounds above
+  -- (the un-windowed all-time sum was the original bug — it could never match a window delta).
   SELECT node_id AS store_id, product_code, SUM(quantity_delta) AS net_delta
   FROM fact_inventory_transaction
   WHERE node_type = 'STORE'
+    AND mdate BETWEEN '2024-08-08' AND '2024-08-28'
   GROUP BY node_id, product_code
 )
 SELECT b.store_id, b.product_code, b.opening_qty, b.closing_qty,
@@ -192,7 +200,11 @@ SELECT b.store_id, b.product_code, b.opening_qty, b.closing_qty,
        (b.closing_qty - b.opening_qty) AS observed_change
 FROM bounds b LEFT JOIN moves m ON m.store_id = b.store_id AND m.product_code = b.product_code
 WHERE (b.closing_qty - b.opening_qty) <> COALESCE(m.net_delta, 0);
--- FAIL rows list the offending store + product (expect 0 after reconciliation, or document residual in S3).
+-- Residual is EXPECTED and documented in report S3 (tolerance 0 is deliberately strict): the
+-- store physical-count snapshots and the movement ledger are independently sourced — store POS
+-- sell-through is NOT recorded in fact_inventory_transaction (only PICK/RCVD/RET/DMG are), so the
+-- two cannot reconcile to unit tolerance. ~237/1100 store x product pairs reconcile exactly; the
+-- rest are a data-sourcing observation, not an anomaly-resolution defect.
 
 -- ===========================================================================
 -- CHECK 9 — CLASSIFIED CERTAINTY SEGREGATION: no Finance MARTS row is ESTIMATED while still

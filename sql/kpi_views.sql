@@ -124,12 +124,18 @@ SELECT ROUND(SUM(weighted), 2) AS gmv_point,
        ROUND(SUM(weighted) * 1.35, 2) AS gmv_upper,
        FALSE AS is_confirmed_transaction, 'ESTIMATED' AS metric_certainty_level
 FROM (
-  SELECT CASE event_type_code
+  -- B6 estimated GMV per signal event = weight x the listing's ASKING_PRICE (the value at risk of
+  -- transacting). offer_amount is populated ONLY on OFFER_MADE events and is NULL for the
+  -- SELLER_SOLD / PHN_REVEAL / OFFER_ACC signals that actually carry ESTIMATED_NL_GMV, so the value
+  -- must come from fact_classified_listing_snapshot.asking_price, joined on listing_id (one row/listing).
+  -- event_type_code uses 'CHAT_START' in this build (not 'CHAT').
+  SELECT CASE e.event_type_code
            WHEN 'SELLER_SOLD' THEN 0.60 WHEN 'PHN_REVEAL' THEN 0.15
-           WHEN 'CHAT' THEN 0.08 WHEN 'OFFER_ACC' THEN 0.30 ELSE 0 END
-         * COALESCE(offer_amount, 0) AS weighted
-  FROM NEXAMART_GOLD.fact_classified_listing_event
-  WHERE anomaly_reason_code LIKE '%ESTIMATED_NL_GMV%'
+           WHEN 'CHAT_START' THEN 0.08 WHEN 'OFFER_ACC' THEN 0.30 ELSE 0 END
+         * COALESCE(s.asking_price, 0) AS weighted
+  FROM NEXAMART_GOLD.fact_classified_listing_event e
+  JOIN NEXAMART_GOLD.fact_classified_listing_snapshot s ON s.listing_id = e.listing_id
+  WHERE e.anomaly_reason_code LIKE '%ESTIMATED_NL_GMV%'
 );
 
 -- vw_campaign_incremental_revenue — campaign NCR minus normalised baseline | CONFIRMED
