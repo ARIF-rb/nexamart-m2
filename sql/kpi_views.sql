@@ -50,7 +50,8 @@ FROM (
   SELECT 'EC' AS channel, d.campaign_phase, f.confirmed_revenue_excl_tax AS net_confirmed
   FROM NEXAMART_GOLD.fact_ecommerce_order_line f JOIN NEXAMART_GOLD.dim_date d ON f.date_key = d.date_key
   UNION ALL
-  SELECT 'STORE', d.campaign_phase, (f.net_amount - COALESCE(f.return_amount, 0))
+  -- store NCR = net_amount (store returns are surfaced separately in vw_revenue_leakage; fact_store_sale_line has no return column)
+  SELECT 'STORE', d.campaign_phase, f.net_amount
   FROM NEXAMART_GOLD.fact_store_sale_line f JOIN NEXAMART_GOLD.dim_date d ON f.date_key = d.date_key
 )
 GROUP BY channel, campaign_phase;
@@ -65,11 +66,9 @@ SELECT 'CANCELLATION' AS leakage_type,
        TRUE AS is_confirmed_transaction, 'CONFIRMED' AS metric_certainty_level
 FROM NEXAMART_GOLD.fact_ecommerce_order_line
 UNION ALL
-SELECT 'EC_RETURN_REFUND', ROUND(SUM(COALESCE(refund_amount, 0)), 2), TRUE, 'CONFIRMED'
-FROM NEXAMART_GOLD.fact_return_line
-UNION ALL
-SELECT 'STORE_RETURN', ROUND(SUM(COALESCE(return_amount, 0)), 2), TRUE, 'CONFIRMED'
-FROM NEXAMART_GOLD.fact_store_sale_line;
+-- all platform return refunds (EC + store) live in fact_return_line; fact_store_sale_line has no return column
+SELECT 'RETURN_REFUND', ROUND(SUM(COALESCE(refund_amount, 0)), 2), TRUE, 'CONFIRMED'
+FROM NEXAMART_GOLD.fact_return_line;
 
 -- vw_gross_margin_by_channel — NCR - COGS by channel | CONFIRMED
 -- business_definition: numerator/denominator pair (never a pre-divided ratio). STORE has cogs_amount;
@@ -94,7 +93,7 @@ SELECT ROUND(SUM(gross_margin), 2) AS net_margin_numerator,
        ROUND(SUM(revenue), 2) AS revenue_denominator,
        TRUE AS is_confirmed_transaction, 'CONFIRMED' AS metric_certainty_level
 FROM (
-  SELECT (net_amount - COALESCE(cogs_amount, 0) - COALESCE(return_amount, 0)) AS gross_margin, net_amount AS revenue
+  SELECT (net_amount - COALESCE(cogs_amount, 0)) AS gross_margin, net_amount AS revenue
   FROM NEXAMART_GOLD.fact_store_sale_line
   UNION ALL
   SELECT confirmed_revenue_excl_tax, confirmed_revenue_excl_tax FROM NEXAMART_GOLD.fact_ecommerce_order_line
@@ -189,20 +188,24 @@ SELECT COUNT_IF(NOT anomaly_flag) AS accurate_numerator,
        'CONFIRMED' AS metric_certainty_level
 FROM NEXAMART_GOLD.fact_store_inventory_snapshot;
 
--- vw_return_to_restock_cycle_time — avg days return receipt -> sellable | CONFIRMED
--- business_definition: avg days from return receipt to restock (where the return fact records both).
+-- vw_return_to_restock_cycle_time — avg days request -> receipt (processing proxy) | CONFIRMED
+-- business_definition: fact_return_line carries request/receipt DATE KEYS (not a restock_date); we expose the
+--   request->receipt processing time via dim_date as the available cycle-time proxy (documented in S4).
 CREATE OR REPLACE VIEW vw_return_to_restock_cycle_time AS
-SELECT ROUND(AVG(DATEDIFF('day', return_receipt_date, restock_date)), 2) AS avg_cycle_days,
+SELECT ROUND(AVG(DATEDIFF('day', dq.date_iso::date, dr.date_iso::date)), 2) AS avg_cycle_days,
        COUNT(*) AS restocked_returns,
        'CONFIRMED' AS metric_certainty_level
-FROM NEXAMART_GOLD.fact_return_line
-WHERE return_receipt_date IS NOT NULL AND restock_date IS NOT NULL;
+FROM NEXAMART_GOLD.fact_return_line f
+JOIN NEXAMART_GOLD.dim_date dq ON f.return_request_date_key = dq.date_key
+JOIN NEXAMART_GOLD.dim_date dr ON f.return_receipt_date_key = dr.date_key;
 
--- vw_open_box_conversion_rate — % returned units open-box AND sold in 30d | CONFIRMED
+-- vw_open_box_conversion_rate — % returns whose return-period revenue was realised (resale proxy) | INFERRED
+-- business_definition: open-box restock-condition + 30d-resale tracking is not in Gold; we approximate
+--   "converted/resold" by a positive revenue_impact_return_period on the return line (documented in S4).
 CREATE OR REPLACE VIEW vw_open_box_conversion_rate AS
-SELECT COUNT_IF(restocked_as_condition = 'OPEN_BOX' AND sold_within_30d) AS converted_numerator,
-       COUNT_IF(restocked_as_condition = 'OPEN_BOX') AS open_box_denominator,
-       'CONFIRMED' AS metric_certainty_level
+SELECT COUNT_IF(COALESCE(revenue_impact_return_period, 0) > 0) AS converted_numerator,
+       COUNT(*) AS returns_denominator,
+       'INFERRED' AS metric_certainty_level
 FROM NEXAMART_GOLD.fact_return_line;
 
 -- ===========================================================================
@@ -279,7 +282,7 @@ WHERE placed_to_captured_hours IS NOT NULL;
 
 -- vw_boris_count — online returns processed at stores | CONFIRMED
 CREATE OR REPLACE VIEW vw_boris_count AS
-SELECT COUNT_IF(is_boris) AS boris_returns,
+SELECT COUNT_IF(is_boris_return) AS boris_returns,
        'CONFIRMED' AS metric_certainty_level
 FROM NEXAMART_GOLD.fact_return_line;
 
@@ -340,13 +343,16 @@ SELECT COUNT(*) AS total_listings,
 FROM NEXAMART_GOLD.fact_classified_listing_snapshot;
 
 -- vw_seller_risk_score_distribution — sellers per risk tier | CONFIRMED
--- business_definition: count of sellers per risk tier from dim_seller. (B8's corrected tiers live in
---   silver_ts_sellers.b_classification; the dim_seller refresh is a member follow-up — see S2.)
+-- business_definition: count of sellers per risk tier, bucketed from dim_seller.seller_risk_score using the
+--   B8 thresholds (>=0.65 HIGH, 0.40-0.65 MEDIUM/UNDER_REVIEW, else LOW). dim_seller has no risk_tier column;
+--   the bucketing is applied here (member dim refresh is a follow-up — see S2).
 CREATE OR REPLACE VIEW vw_seller_risk_score_distribution AS
-SELECT risk_tier, COUNT(*) AS seller_count,
+SELECT CASE WHEN seller_risk_score >= 0.65 THEN 'HIGH'
+            WHEN seller_risk_score >= 0.40 THEN 'MEDIUM' ELSE 'LOW' END AS risk_tier,
+       COUNT(*) AS seller_count,
        'CONFIRMED' AS metric_certainty_level
 FROM NEXAMART_GOLD.dim_seller
-GROUP BY risk_tier;
+GROUP BY 1;
 
 -- vw_validated_report_rate — INFERRED
 -- business_definition: corroboration proxy — listings carrying an automated risk signal (A13 image-hash
