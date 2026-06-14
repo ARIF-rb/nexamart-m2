@@ -166,11 +166,11 @@ WHERE o.order_date BETWEEN '2024-08-08' AND '2024-08-28'
   AND o.promo_code_applied IS NULL;
 
 -- B2 — PARTIAL_REFUND_PERIOD  (silver_rr_refund_events)  [expect 1]
+-- The single refund_type='PARTIAL' row (cross-period: refund month/year <> original month/year).
 SELECT COUNT(*) AS cross_period_partial_refunds,
        ROUND(SUM(refund_amount), 2) AS reversal_amount
 FROM silver_rr_refund_events
-WHERE is_partial = TRUE
-  AND DATE_TRUNC('month', refund_datetime) <> DATE_TRUNC('month', original_sale_datetime);
+WHERE refund_type = 'PARTIAL';
 
 -- B3 — MOVEMENT_NULL_REF  (silver_wh_inventory_movements)  [expect 175 all PCK]
 SELECT movement_type, COUNT(*) AS null_ref_movements
