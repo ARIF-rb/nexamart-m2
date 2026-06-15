@@ -264,26 +264,32 @@ GMV are **reported separately and never added** — the single most common legac
 `vw_net_margin_after_fulfilment` currently return margin = revenue (numerator = denominator); margin % is
 therefore not yet meaningful and is flagged for the SCD/COGS member follow-up rather than reported as a KPI.
 
-### Why each team's number differed
+### Why each team's number differed — claimed vs warehouse-reproducible
 
-| Team | What they reported | Why it was wrong | Anomaly(ies) |
+Each team's headline came from summing a different measure on a different basis. The brief's claimed
+growth rates (Sales +34%, Finance +11%, …) are **not reproducible as growth rates** from this warehouse;
+what the deployed views *do* reproduce is the ₹ figure each team mis-stated and the corrected one beside
+it. Every figure below traces to a live `NEXAMART_MARTS` view (run 15 Jun 2026) and carries its certainty.
+
+| Team | Claimed (brief) | Warehouse-reproducible figure (certainty) | Anomaly(ies) |
 |---|---|---|---|
-| **Sales** | +34% revenue | counted cancelled orders **and** seller-marked-sold as confirmed revenue | A1, A4/B6 |
-| **Finance** | +11% (the reference) | strict NCR — the correct basis | — |
-| **Marketplace** | inflated GMV | classified estimates not labelled ESTIMATED; relistings double-counted | B6, A12 |
-| **Inventory** | "only 3 stockouts" | website showed ATP while warehouse was empty; negative ATP written | A5, A6 |
-| **Ecommerce** | abandonment +22% | abandonment driven by inventory mismatch + delivery-promise failures, not demand | A5/A6, A14 |
-| **Store Ops** | pickup handling ×3 | BOPIS/BORIS workload invisible in legacy KPIs | B7, BORIS split |
-| **Support** | 340 complaints | one incident logged across chat+phone+email counted 3× | A16 |
-| **Cross-cutting** | — | tax-basis + refund-period mismatches distort every cross-channel sum | A3, B2 |
+| **Sales** | +34% revenue | confirmed revenue overstated by **₹2.13 Cr**: −₹0.41 Cr cancelled EC orders removed (`vw_revenue_leakage`, CONFIRMED) + ₹1.72 Cr seller-marked-sold reclassified out of confirmed to ESTIMATED | A1, A4/B6 |
+| **Finance** | +11% (reference) | **NCR ₹138.35 Cr** — the trusted basis every other number reconciles to (CONFIRMED) | — |
+| **Marketplace** | inflated GMV | Estimated Classified GMV **₹1.26 Cr** B6-weighted vs **₹1.72 Cr** raw (−₹0.46 Cr over-weight; ESTIMATED) + duplicate-listing inflation **1.015×** (19 of 1,253 listings; CONFIRMED) | B6, A12 |
+| **Inventory** | "only 3 stockouts" | **5** SKU-location-days at ATP = 0 and **5** residual oversell-risk snapshots, **all inside the campaign window**; inventory accuracy **99.47%** (216,645/217,800; CONFIRMED) | A5, A6 |
+| **Ecommerce** | abandonment +22% | cart abandonment **41.5%** (684/1,647), payment-failure **7.0%** (67/963), on-time delivery only **54.2%** (340/627) — abandonment tracks supply/delivery failure, not demand (CONFIRMED, whole-period) | A5/A6, A14 |
+| **Store Ops** | pickup handling ×3 | **896** BOPIS orders made visible (avg readiness **16.9 h**); BORIS = **0** in window (CONFIRMED) | B7, BORIS split |
+| **Support** | 340 complaints | A16 cross-channel case de-duplication applied in S1; complaint volume is not surfaced as a MARTS KPI (no support view) | A16 |
+| **Cross-cutting** | — | tax-basis (A3) normalises POS to tax-exclusive; refund-period (B2) moves the ₹2.16 L partial refund to the return period — both make cross-channel sums comparable | A3, B2 |
 
-Each team's figure reconciles to NCR by removing exactly the deductions above. On the campaign window
-itself (8–28 Aug, 21 days), `vw_campaign_incremental_revenue` puts EC confirmed campaign revenue at
-**₹1.79 Cr** against a length-normalised baseline of **₹0.52 Cr** → **+₹1.27 Cr incremental (CONFIRMED)**;
-B1's session-bridge attribution (102 of the 126 promo-less in-window orders, confidence 0.85) is the
-INFERRED mechanism behind that lift. *(Reconciliation note: the brief's illustrative "+34% vs +11%" team
-figures are scenario framing — this warehouse does not reproduce them as growth rates; the data-backed
-campaign picture is in S5.)*
+*Grain note:* the funnel/conversion and seller figures above are **whole-period** (those views are not
+phase-split); the phase-split numbers (GSV / NCR / Confirmed GMV by Baseline | Campaign | Post) are in
+the waterfall above and in S5.
+
+On the campaign window itself (8–28 Aug, 21 days), `vw_campaign_incremental_revenue` puts EC confirmed
+campaign revenue at **₹1.79 Cr** against a length-normalised baseline of **₹0.52 Cr** → **+₹1.27 Cr
+incremental (CONFIRMED)**; B1's session-bridge attribution (102 of the 126 promo-less in-window orders,
+confidence 0.85) is the INFERRED mechanism behind that lift. The data-backed campaign verdict is in S5.
 
 ---
 
