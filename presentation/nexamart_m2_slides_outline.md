@@ -7,7 +7,7 @@ question. Mirrors the brief §12.4 fixed sequence. Export to `nexamart_m2_presen
 |---|---|---|
 | 1 | **The Problem** | One slide showing the conflicting numbers each team reported (Sales +34%, Finance +11%, etc.). Make the business problem tangible. |
 | 2 | **What We Built** | Architecture (Bronze → Silver → Gold → Marts) + tools (Snowflake, Databricks, BI). Keep it visual. |
-| 3 | **What We Found (1)** | Top impactful anomalies — A1 cancelled-in-revenue (₹6.15 Cr), A3 tax-basis mismatch (₹16.25 Cr) — and what they meant for the numbers. |
+| 3 | **What We Found (1)** | Top impactful anomalies — A1 cancelled-in-revenue (₹0.41 Cr), A4 seller-sold mislabelled as confirmed (₹1.72 Cr → ESTIMATED), A3 tax-basis mismatch (₹16.25 Cr comparable basis) — and what they meant for the numbers. |
 | 4 | **What We Found (2)** | A4 NexaLocal seller-sold as revenue (₹1.72 Cr, now ESTIMATED), A11 customer-9999 collision, inventory anomalies (A5/A6). |
 | 5 | **The Reconciled Numbers (1)** | GSV → NCR waterfall: each deduction named and quantified (cancellations, refunds, tax, shipping). |
 | 6 | **The Reconciled Numbers (2)** | Confirmed GMV vs **Estimated Classified GMV** (separate, with band) + Net Margin. Show the reconciliation to one number. |

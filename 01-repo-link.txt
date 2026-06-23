@@ -1,0 +1,11 @@
+NexaMart Enterprise Data Warehouse - Milestone 2
+Group: Arif (Lead), Khallad, Sameen Fatima, Asad, Hamza, Azhar Sajjad
+
+LIVE PROJECT REPOSITORY (most up-to-date version of every deliverable):
+
+    https://github.com/ARIF-rb/nexamart-m2
+
+This repository holds the latest report, SQL, notebooks, and dashboard. The
+presentation slides are being finalised and will be added to the repository above.
+Please refer to this repository for the current version of all deliverables,
+including any updates made to the report or slides after this submission.

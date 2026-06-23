@@ -2,12 +2,13 @@
 """Assemble the Milestone 2 submission ZIP — `nexamart_m2_group_<N>.zip`.
 
 Submission spec (README.md / docs/tasks/lead.md Task 15):
+  01-repo-link.txt              live GitHub repo link (slides + report updates land there)
   /report        nexamart_m2_report.pdf
   /notebooks     05_anomaly_resolution.ipynb, 06_gold_rebuild.ipynb   (+ _shared/ deps)
   /sql           anomaly_discovery, anomaly_resolution, validation_suite, kpi_views (4 files)
   /dashboard     nexamart_dashboard.(pbix|twbx) + screenshots/*.png
-  /presentation  nexamart_m2_presentation.pptx + nexamart_m2_slides_outline.md
-EXCLUDED: .private/, sql/_m1_seed/, snowflake_setup_m2.sql, M1 notebooks 01-04.
+EXCLUDED: .private/, sql/_m1_seed/, snowflake_setup_m2.sql, M1 notebooks 01-04,
+          presentation/ (slides finalised after this submission — see 01-repo-link.txt).
 
 Usage:
   python tracking/assemble_submission.py            # dry-run: report present / MISSING
@@ -19,6 +20,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # (repo-relative source, arc path inside zip, required?) — globs allowed in source
 MANIFEST = [
+    ("01-repo-link.txt",                              "01-repo-link.txt",                              True),   # leads the archive; live repo for slides + report updates
     ("report/nexamart_m2_report.pdf",                 "report/nexamart_m2_report.pdf",                 True),
     ("notebooks/05_anomaly_resolution.ipynb",         "notebooks/05_anomaly_resolution.ipynb",         True),
     ("notebooks/06_gold_rebuild.ipynb",               "notebooks/06_gold_rebuild.ipynb",               True),
@@ -27,8 +29,7 @@ MANIFEST = [
     ("sql/anomaly_resolution.sql",                    "sql/anomaly_resolution.sql",                    True),
     ("sql/validation_suite.sql",                      "sql/validation_suite.sql",                      True),
     ("sql/kpi_views.sql",                             "sql/kpi_views.sql",                             True),
-    ("presentation/nexamart_m2_presentation.pptx",   "presentation/nexamart_m2_presentation.pptx",    True),
-    ("presentation/nexamart_m2_slides_outline.md",   "presentation/nexamart_m2_slides_outline.md",    True),
+    # presentation/ intentionally excluded from this ZIP — slides finalised later; see 01-repo-link.txt
     ("dashboard/nexamart_dashboard.*",               "dashboard/",                                    True),   # .pbix/.twbx/.html
     ("dashboard/screenshots/*.png",                  "dashboard/screenshots/",                        True),
 ]

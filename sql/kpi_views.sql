@@ -168,6 +168,8 @@ SELECT sku, warehouse_id AS location_id, snapshot_date, atp_qty,
 FROM NEXAMART_GOLD.fact_warehouse_inventory_snapshot;
 
 -- vw_stockout_rate — % SKU-loc-day with ATP=0 | CONFIRMED
+-- business_definition: numerator/denominator — warehouse SKU-location-days at ATP = 0 / all SKU-location-days,
+--   per snapshot_date. Semi-additive (per-date grain; do not sum across dates). fact_warehouse_inventory_snapshot.
 CREATE OR REPLACE VIEW vw_stockout_rate AS
 SELECT snapshot_date,
        COUNT_IF(atp_qty = 0) AS stockout_numerator,
@@ -219,6 +221,8 @@ FROM NEXAMART_GOLD.fact_return_line;
 -- ===========================================================================
 
 -- vw_cart_abandonment_rate — add-to-cart sessions without checkout | CONFIRMED
+-- business_definition: numerator/denominator — web sessions that added to cart but never reached a
+--   checkout-complete / purchase event / all sessions that added to cart. Session grain (fact_web_page_event).
 CREATE OR REPLACE VIEW vw_cart_abandonment_rate AS
 WITH s AS (
   SELECT session_id,
@@ -231,6 +235,9 @@ SELECT COUNT_IF(has_cart = 1 AND has_checkout = 0) AS abandoned_numerator,
 FROM s;
 
 -- vw_checkout_conversion_rate — purchase / checkout-initiated sessions | CONFIRMED
+-- business_definition: numerator/denominator — sessions reaching a purchase / checkout-complete event /
+--   sessions that initiated checkout. Session-funnel grain (fact_web_page_event); distinct from the
+--   order-fulfilment payment-failure measure, so the two are not directly comparable.
 CREATE OR REPLACE VIEW vw_checkout_conversion_rate AS
 WITH s AS (
   SELECT session_id,
@@ -287,6 +294,8 @@ FROM NEXAMART_GOLD.fact_order_fulfilment
 WHERE placed_to_captured_hours IS NOT NULL;
 
 -- vw_boris_count — online returns processed at stores | CONFIRMED
+-- business_definition: count of return lines flagged as BORIS (Buy-Online-Return-In-Store), i.e. an online
+--   order returned through a physical store. Return-line grain (fact_return_line.is_boris_return).
 CREATE OR REPLACE VIEW vw_boris_count AS
 SELECT COUNT_IF(is_boris_return) AS boris_returns,
        'CONFIRMED' AS metric_certainty_level
@@ -315,6 +324,8 @@ FROM NEXAMART_GOLD.fact_order_fulfilment;
 -- ===========================================================================
 
 -- vw_active_listing_count — active NexaLocal listings | CONFIRMED
+-- business_definition: count of NexaLocal classified listings currently in ACTIVE status (sold / expired /
+--   relisted-original listings excluded). Listing-snapshot grain (fact_classified_listing_snapshot).
 CREATE OR REPLACE VIEW vw_active_listing_count AS
 SELECT COUNT(*) AS active_listings,
        'CONFIRMED' AS metric_certainty_level
@@ -331,6 +342,8 @@ SELECT (SELECT COUNT(*) FROM NEXAMART_GOLD.fact_classified_listing_event
        'CONFIRMED' AS metric_certainty_level;
 
 -- vw_relisting_rate — % listings relisted | CONFIRMED
+-- business_definition: numerator/denominator — NexaLocal listings relisted after a prior sale (relist_count>0
+--   or A12 RELISTED_AFTER_SOLD flag) / all listings. Listing-snapshot grain (fact_classified_listing_snapshot).
 CREATE OR REPLACE VIEW vw_relisting_rate AS
 SELECT COUNT_IF(COALESCE(relist_count, 0) > 0
                 OR anomaly_reason_code LIKE '%RELISTED_AFTER_SOLD%') AS relisted_numerator,

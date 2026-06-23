@@ -1,38 +1,45 @@
 # NexaMart Enterprise Data Warehouse — Milestone 2 Report
 
-> Group [N] · Members: Lead, M2, M3, M4, M5, M6 · Export to PDF as `nexamart_m2_report.pdf` for the ZIP.
-> Authoritative definitions: `docs/glossary.md`. Verified counts: `.private/lead_cheatsheet.md`.
+> **Group Arif** · Arif (Lead) · Khallad (M2) · Sameen Fatima (M3) · Asad (M4) · Hamza (M5) · Azhar Sajjad (M6)
+
+**Team Contributions**
+
+| Member | Deliverables |
+|---|---|
+| Arif (Lead) | Anomaly resolution (§1), Gold rebuild (§2), Validation suite (§3), KPI views & reconciliation (§4), Campaign conclusion (§5), warehouse infrastructure & report assembly |
+| Hamza, Asad, Khallad | Stakeholder dashboard — all 5 pages |
+| Sameen Fatima, Azhar Sajjad | Executive presentation slides |
 
 ---
 
-## Executive Summary  *(Owner: Lead · ≤1 page)*
+## Executive Summary  *(Owner: Arif, Lead)*
 
-**The question.** Was the Back-to-School campaign (8–28 Aug 2024) actually successful, or did every team
-just count something different?
+Was the Back-to-School campaign (8–28 Aug 2024) actually successful, or did every team just count
+something different?
 
-**The answer.** On a certainty-segregated, anomaly-corrected basis it was **clearly positive** — campaign
-confirmed revenue ran **~+50% above the pre-ramp run-rate** (+₹1.27 Cr EC incremental), not a failure and
-not the inflated **+34%** Sales celebrated. The gap between those two readings is not opinion; it is 24
-resolved data anomalies. Sales counted **cancelled orders** (A1, ₹4.08M) and **seller-marked-sold listings**
-(A4, ₹1.72 Cr raw value) as confirmed revenue; a payment-after-cancel reversal liability (A2, flagged) and
-tax-basis mismatches (A3) distorted the rest. *(The brief's "+11%" reference figure is scenario framing —
-see S5; this warehouse does not reproduce it as a growth rate.)*
+On a certainty-segregated, anomaly-corrected basis it was clearly positive. Campaign confirmed revenue ran
+about 50% above the pre-ramp run-rate (+₹1.27 Cr EC incremental). That is neither a failure nor the inflated
++34% Sales celebrated, and the gap between those two readings is not a matter of opinion. It comes down to
+24 resolved data anomalies. Sales had counted cancelled orders (A1, ₹4.08M) and seller-marked-sold listings
+(A4, ₹1.72 Cr raw value) as confirmed revenue, while a payment-after-cancel reversal liability (A2, flagged)
+and tax-basis mismatches (A3) distorted the rest. The brief's "+11%" reference figure is scenario framing
+(see S5); this warehouse does not reproduce it as a growth rate.
 
-**How we got one number.** We resolved every anomaly in corrected Silver (audit trail preserved, nothing
-deleted), rebuilt the affected Gold facts, validated with 10 checks, and exposed certainty-segregated KPI
-views in `NEXAMART_MARTS`. Confirmed revenue and **Estimated Classified GMV** (NexaLocal offline, ±35%
-band) are reported **separately and never added** — the single most common way the legacy teams
-double-counted.
+Getting to one number meant resolving every anomaly in corrected Silver with the audit trail kept and
+nothing deleted, rebuilding the affected Gold facts, validating with 10 checks, and exposing
+certainty-segregated KPI views in `NEXAMART_MARTS`. Confirmed revenue and Estimated Classified GMV
+(NexaLocal offline, ±35% band) are reported separately and never added together. That habit is where the
+legacy teams most often double-counted.
 
-**The headline numbers** (GSV → NCR waterfall in S4; certainty-labelled metrics in S5): GSV **₹141.5 Cr**
-minus cancelled EC revenue (₹4.08M) and POS line discounts (₹2.75 Cr) = **NCR ₹138.35 Cr**, the one trusted
-top-line. Return refunds (₹0.65 Cr) and **Estimated Classified GMV** (₹1.26 Cr point, ±35% band, ESTIMATED)
-are held **separately and never added in**. On the campaign window, EC confirmed revenue is **+₹1.27 Cr
-incremental** (B1 session-bridge attribution, INFERRED).
+The headline numbers (the GSV → NCR waterfall is in S4, the certainty-labelled metrics in S5): GSV ₹141.5
+Cr, less cancelled EC revenue (₹4.08M) and POS line discounts (₹2.75 Cr), gives NCR ₹138.35 Cr, the one
+trusted top-line. Return refunds (₹0.65 Cr) and Estimated Classified GMV (₹1.26 Cr point, ±35% band,
+ESTIMATED) are held separately and never added in. Over the campaign window, EC confirmed revenue is
++₹1.27 Cr incremental (B1 session-bridge attribution, INFERRED).
 
 ---
 
-## Section 1 — Anomaly Resolution Report  *(All members; owner per anomaly)*
+## Section 1 — Anomaly Resolution Report  *(Owner: Arif, Lead)*
 
 For **each Category A** anomaly: detection method, root cause, the specific PySpark fix logic, the
 post-fix verification result (**affected row count before → after**), and the business impact in
@@ -53,43 +60,43 @@ Schema notes baked into the predicates: member-built Silver tables use base colu
 is epoch-NUMBER; A9 is the cross-source `silver_ts_seller_listings` catalogue mismatch.
 
 ### Category A
-| ID | Detection (live Silver predicate) | Root cause | Fix (method) | Before → After | Business impact | Owner |
-|---|---|---|---|---|---|---|
-| A1 | `order_status='CANCELLED' AND subtotal_excl_tax>0` ✓94 | cancelled orders left revenue on the line | ZEROED_CANCELLED_REVENUE | 94 → 0 | ₹4.08M (₹0.41 Cr) over-count removed | M5 |
-| A2 | captured PG txn (`captured_ts` not null) after earliest CANCELLED status | capture fired post-cancel | FLAGGED_REVERSAL_REQUIRED | 27 → 0 | 27 captured txns held as reversal liability (excl. NCR) | M5 |
-| A3 | POS incl-tax vs EC excl-tax basis differ | mixed tax bases summed naively | NORMALISED_TAX_EXCLUSIVE | schema-wide | ₹16.25 Cr comparable basis | M5 |
-| A4 | `event_type_code='SELLER_SOLD'` ✓449 | seller-sold counted as confirmed revenue | RELABELLED_ESTIMATED_GMV | 449 → 0 confirmed | ₹1.72 Cr moved to ESTIMATED | M6 |
-| A5 | `atp_qty>0 AND physical_qty=0` ✓5 | ATP not decremented to physical | CORRECTED_ATP_TO_ZERO | 5 → 0 | oversell risk removed | Lead |
-| A6 | `sellable_qty<0 OR physical_qty<0` ✓8 | negative inventory written | CORRECTED_ATP_TO_ZERO | 8 → 0 | stockout analysis fixed | M4 |
-| A7 | `inspection_status='PENDING' AND restocked_qty>0` ✓10 | restock before inspection | ZEROED_RESTOCK_PRE_INSPECTION | 10 → 0 | ATP inflation removed | Lead |
-| A8 | stores 3/7/12 × (1–7 Aug) absent from snapshots | snapshots not captured in ramp-up | RECONSTRUCTED_SNAPSHOT | ~21 reconstructed | allocation accuracy (1–7 Aug) | Lead |
-| A9 | `silver_ts_seller_listings`: listing 42 / NX-TECH-0001 catalogue mismatch | seller feed contradicts catalogue | APPLIED_CANONICAL_PRODUCT | 1 → 0 | category revenue corrected | M3 |
-| A10 | `condition_on_receipt='OPENED' AND restocked_as_condition='NEW'` | open-box restocked as NEW | CORRECTED_CONDITION_OPEN_BOX | 12 → 0 | price premium quantified | M4 |
-| A11 | `customer_id='9999'` ✓178 | guest placeholder collides w/ real loyalty | REKEYED_GUEST_BUCKET | 178 → 0 | customer profile de-collided | M2 |
-| A12 | self-join `image_hash`+seller, prior SOLD/EXPIRED, ACTIVE relist | listing relisted after sold | LINKED_RELISTING_EXCLUDED | 3 pairs | GMV double-count removed | Lead |
-| A13 | `image_hash` shared by ≥2 seller accounts ✓3 rings | coordinated listing ring | FLAGGED_FRAUD_RING | rings flagged | trust & safety | M6 |
-| A14 | `delivered_ts<pickup_ts` (strict) ✓18 | courier clock drift | CORRECTED_DELIVERY_TS / ESCALATED_MANUAL_REVIEW | 18 (>72h escalated) | on-time rate corrected | Lead |
-| A15 | `days_post_delivery<0` | review before delivery | SET_VERIFIED_PURCHASE_FALSE | 25 → 0 verified | review-score KPI corrected | M6 |
-| A16 | `is_duplicate_flag=TRUE` ✓7 | same complaint via many channels | DEDUPED_CANONICAL_CASE | 7 → deduped | complaint volume corrected | M6 |
+| ID | Detection (live Silver predicate) | Root cause | Fix (method) | Before → After | Business impact |
+|---|---|---|---|---|---|
+| A1 | `order_status='CANCELLED' AND subtotal_excl_tax>0` ✓94 | cancelled orders left revenue on the line | ZEROED_CANCELLED_REVENUE | 94 → 0 | ₹4.08M (₹0.41 Cr) over-count removed |
+| A2 | captured PG txn (`captured_ts` not null) after earliest CANCELLED status | capture fired post-cancel | FLAGGED_REVERSAL_REQUIRED | 27 → 0 | 27 captured txns held as reversal liability (excl. NCR) |
+| A3 | POS incl-tax vs EC excl-tax basis differ | mixed tax bases summed naively | NORMALISED_TAX_EXCLUSIVE | schema-wide | ₹16.25 Cr comparable basis |
+| A4 | `event_type_code='SELLER_SOLD'` ✓449 | seller-sold counted as confirmed revenue | RELABELLED_ESTIMATED_GMV | 449 → 0 confirmed | ₹1.72 Cr moved to ESTIMATED |
+| A5 | `atp_qty>0 AND physical_qty=0` ✓5 | ATP not decremented to physical | CORRECTED_ATP_TO_ZERO | 5 → 0 | oversell risk removed |
+| A6 | `sellable_qty<0 OR physical_qty<0` ✓8 | negative inventory written | CORRECTED_ATP_TO_ZERO | 8 → 0 | stockout analysis fixed |
+| A7 | `inspection_status='PENDING' AND restocked_qty>0` ✓10 | restock before inspection | ZEROED_RESTOCK_PRE_INSPECTION | 10 → 0 | ATP inflation removed |
+| A8 | stores 3/7/12 × (1–7 Aug) absent from snapshots | snapshots not captured in ramp-up | RECONSTRUCTED_SNAPSHOT | ~21 reconstructed | allocation accuracy (1–7 Aug) |
+| A9 | `silver_ts_seller_listings`: listing 42 / NX-TECH-0001 catalogue mismatch | seller feed contradicts catalogue | APPLIED_CANONICAL_PRODUCT | 1 → 0 | category revenue corrected |
+| A10 | `condition_on_receipt='OPENED' AND restocked_as_condition='NEW'` | open-box restocked as NEW | CORRECTED_CONDITION_OPEN_BOX | 12 → 0 | price premium quantified |
+| A11 | `customer_id='9999'` ✓178 | guest placeholder collides w/ real loyalty | REKEYED_GUEST_BUCKET | 178 → 0 | customer profile de-collided |
+| A12 | self-join `image_hash`+seller, prior SOLD/EXPIRED, ACTIVE relist | listing relisted after sold | LINKED_RELISTING_EXCLUDED | 3 pairs | GMV double-count removed |
+| A13 | `image_hash` shared by ≥2 seller accounts ✓3 rings | coordinated listing ring | FLAGGED_FRAUD_RING | rings flagged | trust & safety |
+| A14 | `delivered_ts<pickup_ts` (strict) ✓18 | courier clock drift | CORRECTED_DELIVERY_TS / ESCALATED_MANUAL_REVIEW | 18 (>72h escalated) | on-time rate corrected |
+| A15 | `days_post_delivery<0` | review before delivery | SET_VERIFIED_PURCHASE_FALSE | 25 → 0 verified | review-score KPI corrected |
+| A16 | `is_duplicate_flag=TRUE` ✓7 | same complaint via many channels | DEDUPED_CANONICAL_CASE | 7 → deduped | complaint volume corrected |
 
 ### Category B
-| ID | Ambiguity | Chosen interpretation | Quantified alternative | Owner |
-|---|---|---|---|---|
-| B1 | promo-less in-window + prior UTM | attribute 102 (conf 0.85) | not attributing understates ~₹0.94 Cr confirmed | Lead |
-| B2 | Aug sale / Sep refund | recognise in return period | original-period reduces Aug NCR ~₹2.16 L | Lead |
-| B3 | 175 PCK null-ref movements | probable missing-ref (INFERRED) | shrinkage reading overstates loss | Lead |
-| B4 | NL title → catalogue | ≥0.75 match / 0.65–0.75 review | lower threshold injects false matches | M3 |
-| B5 | cross-channel identity | merge ≥0.90 | 0.70 over-merges distinct customers | M2 |
-| B6 | Estimated GMV formula | weighted signals + ±35% band | seller-sold-only mis-states | M2 |
-| B7 | BOPIS no pickup event | treat as fulfilled (scan miss) | not-collected understates fulfilment | Lead |
-| B8 | seller trust score | weighted 8-signal → 5 tiers | equal-weight unacceptable | M2 |
+| ID | Ambiguity | Chosen interpretation | Quantified alternative |
+|---|---|---|---|
+| B1 | promo-less in-window + prior UTM | attribute 102 (conf 0.85) | not attributing understates ~₹0.94 Cr confirmed |
+| B2 | Aug sale / Sep refund | recognise in return period | original-period reduces Aug NCR ~₹2.16 L |
+| B3 | 175 PCK null-ref movements | probable missing-ref (INFERRED) | shrinkage reading overstates loss |
+| B4 | NL title → catalogue | ≥0.75 match / 0.65–0.75 review | lower threshold injects false matches |
+| B5 | cross-channel identity | merge ≥0.90 | 0.70 over-merges distinct customers |
+| B6 | Estimated GMV formula | weighted signals + ±35% band | seller-sold-only mis-states |
+| B7 | BOPIS no pickup event | treat as fulfilled (scan miss) | not-collected understates fulfilment |
+| B8 | seller trust score | weighted 8-signal → 5 tiers | equal-weight unacceptable |
 
 ### Per-anomaly detail (detection → root cause → fix → verification → impact)
 
 Resolution code: `notebooks/05_anomaly_resolution.ipynb` (one cell per anomaly); post-resolution verify:
 `sql/anomaly_resolution.sql`. Every corrected row keeps `anomaly_flag=TRUE` + its original
 `anomaly_reason_code` and gains `resolution_applied=TRUE` + `resolution_method` (+ `b_classification`
-for Category B) — nothing is deleted (brief §8.1).
+for Category B), and nothing is deleted (brief §8.1).
 
 - **A1 — Cancelled orders carrying revenue.** 94 EC orders had `order_status='CANCELLED'` but a positive
   `subtotal_excl_tax`; the cancellation workflow set the status without reversing the revenue line. Fix:
@@ -98,8 +105,8 @@ for Category B) — nothing is deleted (brief §8.1).
   excludes them. Verify → 0 unresolved. **Removes the ₹4.08M (₹0.41 Cr) cancelled-revenue over-count that inflated Sales' +34% claim** (`vw_revenue_leakage` CANCELLATION = ₹4,078,605).
 - **A2 — Payment captured after cancellation.** 27 captured PG transactions (26 strictly after the
   cancellation timestamp) sit against cancelled orders. Fix: `FLAGGED_REVERSAL_REQUIRED` (kept, excluded
-  from NCR) — held as a reversal liability (the captured-payment exposure sits in the PG source, outside the
-  Gold facts), never counted as revenue.
+  from NCR), held as a reversal liability. The captured-payment exposure sits in the PG source, outside the
+  Gold facts, and is never counted as revenue.
 - **A3 — Mixed tax bases.** POS stores tax-inclusive amounts, EC tax-exclusive; naively summing them is
   meaningless. Fix: derive a tax-exclusive POS measure (`NORMALISED_TAX_EXCLUSIVE`) so every channel
   reconciles on one basis. Reconciles the ~₹16.25 Cr naive cross-channel figure.
@@ -114,7 +121,8 @@ for Category B) — nothing is deleted (brief §8.1).
   (`CORRECTED_CONDITION_OPEN_BOX`, price-premium quantified). Distinct predicates, overlapping sets.
 - **A8 — Missing snapshot days.** Stores 3/7/12 each missing 7 snapshot days (1–7 Aug, pre-ramp). The
   reconstructed sibling `silver_store_inventory_snapshots_reconstructed` (last-known + interpolation) is
-  resolution-stamped `RECONSTRUCTED_SNAPSHOT`, certainty INFERRED — never CONFIRMED, never campaign-window.
+  resolution-stamped `RECONSTRUCTED_SNAPSHOT` at certainty INFERRED, never CONFIRMED and never inside the
+  campaign window.
 - **A9 — SKU/product mismatch.** Listing 42 cites SKU `NX-TECH-0001` (a laptop) but describes a phone case.
   Fix: catalogue wins (`APPLIED_CANONICAL_PRODUCT`), 1 → 0.
 - **A11 — Placeholder-ID collision.** 178 guest EC orders share `customer_id='9999'` with a real dormant
@@ -124,8 +132,8 @@ for Category B) — nothing is deleted (brief §8.1).
   excluded from GMV (`LINKED_RELISTING_EXCLUDED`, reliability LOW); 3 image-hash rings spanning ≥2 seller
   accounts (18 listings) flagged `FLAGGED_FRAUD_RING`.
 - **A14 — Courier clock drift.** 18 shipments show a DELIVERED event before PICKED_UP. For |delta| ≤ 72h the
-  delivered timestamp is corrected to pickup + 36h (`CORRECTED_DELIVERY_TS`); > 72h is escalated, not
-  auto-corrected (`ESCALATED_MANUAL_REVIEW`) — the expected residual after resolution.
+  delivered timestamp is corrected to pickup + 36h (`CORRECTED_DELIVERY_TS`); beyond 72h it is escalated
+  rather than auto-corrected (`ESCALATED_MANUAL_REVIEW`), which is the expected residual after resolution.
 - **A15 / A16 — CX signals.** 25 reviews posted before delivery set `is_verified_purchase=FALSE`
   (`SET_VERIFIED_PURCHASE_FALSE`); 7 duplicate support cases resolved to their canonical key
   (`DEDUPED_CANONICAL_CASE`) so complaint volume counts distinct incidents.
@@ -142,22 +150,34 @@ for Category B) — nothing is deleted (brief §8.1).
 - **B5 — Identity merge.** A single 0.92-confidence cross-channel pair merged (`MERGED`, threshold ≥0.90);
   a 0.70 threshold would over-merge distinct customers.
 - **B6 — Estimated Classified GMV.** Locked weights (SELLER_SOLD 0.60 / PHN_REVEAL 0.15 / CHAT 0.08 /
-  OFFER_ACC 0.30) × listing confidence, ±35% band, labelled ESTIMATED — surfaced only via
-  `vw_estimated_classified_gmv`, never summed into confirmed revenue.
+  OFFER_ACC 0.30) × listing confidence, ±35% band, labelled ESTIMATED. It is surfaced only via
+  `vw_estimated_classified_gmv` and never summed into confirmed revenue.
 - **B7 — BOPIS scan miss.** 25 BOPIS orders marked DELIVERED with no `BOPIS_COLLECTED` scan treated as
   fulfilled (`TREAT_AS_FULFILLED`, ~13% scan-miss baseline) + `collection_unconfirmed=TRUE`, excluded from
   the BOPIS SLA.
-- **B8 — Seller trust.** Flagged high-risk sellers escalated to `UNDER_REVIEW` via a weighted 8-signal
-  composite (not equal-weight) → 5 tiers; UNDER_REVIEW is reversible (30-day monitoring), unlike suspension.
+- **B8 — Seller trust.** Each seller carries a composite trust score built from eight behavioural signals.
+  It is deliberately not an equal-weight average (the brief rules that out); the weights reflect how much
+  each signal damages buyer trust. Order-cancellation rate and late-fulfilment rate carry the most (0.20
+  each), since a broken delivery promise is the most direct harm. Complaints per 100 orders (0.15) and the
+  integrity signals come next: NexaLocal duplicate-listing rate (0.12), report rate (0.10) and moderation
+  actions (0.08). Return rate (0.10) and buyer-contact response rate (inverted, 0.05) are lagging or service
+  indicators. The weights sum to 1.00 and combine as `trust_score = 1 − Σ(wᵢ × normalised_riskᵢ)`, so a
+  clean seller scores near 1 and a problem seller scores low. The score maps to the five tiers in
+  `dim_seller_risk_tier`: VERIFIED_TRUSTED (≥0.85), STANDARD (≥0.65), UNDER_REVIEW (≥0.40), HIGH_RISK
+  (≥0.20) and SUSPENDED (below 0.20); a flagged seller escalates to UNDER_REVIEW, which is reversible 30-day
+  monitoring rather than suspension. The deployed `vw_seller_risk_score_distribution` rolls these five tiers
+  into a simpler LOW / MEDIUM / HIGH risk band for the dashboard, and on the current data all 348 active
+  sellers sit in the LOW-risk (trusted) band, so UNDER_REVIEW and below are defined by the model but
+  unpopulated for this period.
 
 ---
 
-## Section 2 — Gold Rebuild Summary  *(Owner: Lead, with per-fact owners)*
+## Section 2 — Gold Rebuild Summary  *(Owner: Arif, Lead)*
 
-Corrected Silver flows to Gold via **partial rebuilds** (`notebooks/06_gold_rebuild.ipynb`) — only the
-facts an affected Silver entity feeds are re-pointed at corrected Silver and overwritten; the 8 static
-lookup dims (`dim_date`, `dim_channel`, `dim_step`, `dim_payment_method`, `dim_delivery_method`,
-`dim_listing_condition`, `dim_return_reason`, `dim_promotion`) are **rebuild-exempt** (no Silver feed).
+Corrected Silver flows to Gold through partial rebuilds (`notebooks/06_gold_rebuild.ipynb`): only the facts
+an affected Silver entity feeds are re-pointed at corrected Silver and overwritten. The 8 static lookup dims
+(`dim_date`, `dim_channel`, `dim_step`, `dim_payment_method`, `dim_delivery_method`, `dim_listing_condition`,
+`dim_return_reason`, `dim_promotion`) have no Silver feed, so they are rebuild-exempt.
 
 **Facts rebuilt (9):** `fact_ecommerce_order_line` (A1/A2/A3/A11/B1 — keystone, with the GSV/NCR split),
 `fact_order_fulfilment` (A14/B7), `fact_store_inventory_snapshot` (A6/A8), `fact_warehouse_inventory_snapshot`
@@ -165,15 +185,39 @@ lookup dims (`dim_date`, `dim_channel`, `dim_step`, `dim_payment_method`, `dim_d
 `fact_customer_review` (A15), `fact_customer_complaint` (A16). Each rebuild carries an inline
 `assert_grain` (COUNT(*) = COUNT(DISTINCT grain)).
 
-**Row counts:** corrections change measures and flags, **not** grain, so before/after row counts are
-**identical** per table — the notebook's final cell prints the before/after delta as proof (a non-zero
-delta is treated as a defect). Descriptive dims (`dim_customer`/`dim_product`/`dim_seller`) are left intact:
-facts carry their dim FK as `surrogate_key(natural_code)`, so every fact→dim join still resolves, and the
-SCD2 dim refresh (carrying the A9/B5/B8 descriptive corrections) is a member follow-up. `fact_store_sale_line`
-/ `fact_return_line` / `fact_seller_performance_snapshot` have no in-repo M1 build logic and are noted here
-rather than rebuilt blind.
+**Fact grain declarations.** Every fact is built and validated at one declared grain (validation Check 3
+enforces `COUNT(*) = COUNT(DISTINCT grain)`). Keys shown in code font are the exact declared keys; the rest
+are stated by grain.
 
-**Before → after row counts (Phase-B run, 15 Jun 2026 — every delta 0, confirming grain-preserving
+| Fact | Grain — one row per | Declared key |
+|---|---|---|
+| `fact_ecommerce_order_line` | EC order line | `order_id, line_id` |
+| `fact_store_sale_line` | store POS sale line | transaction × line |
+| `fact_return_line` | return line | return × line |
+| `fact_order_fulfilment` | EC order (fulfilment lifecycle) | `order_id` |
+| `fact_store_inventory_snapshot` | store × product × day *(semi-additive)* | `store_id, product_code, snapshot_date` |
+| `fact_warehouse_inventory_snapshot` | SKU × location × day *(semi-additive)* | sku × location × date |
+| `fact_inventory_transaction` | inventory movement | `movement_id, node_type` |
+| `fact_web_session` | web session *(aggregate clickstream grain)* | session |
+| `fact_web_page_event` | page event *(atomic clickstream grain, Kimball Ch. 15)* | `session_id, event_id` |
+| `fact_classified_listing_snapshot` | listing snapshot *(semi-additive)* | `listing_id` |
+| `fact_classified_listing_event` | NexaLocal listing event | listing event |
+| `fact_seller_performance_snapshot` | seller × period *(semi-additive)* | seller × period |
+| `fact_customer_review` | product/order review | review |
+| `fact_customer_complaint` | support case | `case_id` |
+
+The two clickstream grains (session aggregate plus atomic page event) follow Kimball Chapter 15; the
+snapshot facts are semi-additive and are never summed across dates in the KPI views (validation Check 5).
+
+**Row counts.** Corrections change measures and flags, not grain, so before/after row counts are identical
+per table. The notebook's final cell prints the before/after delta as proof, and a non-zero delta is treated
+as a defect. The descriptive dims (`dim_customer`/`dim_product`/`dim_seller`) are left intact: facts carry
+their dim FK as `surrogate_key(natural_code)`, so every fact→dim join still resolves, and the SCD2 dim
+refresh that carries the A9/B5/B8 descriptive corrections is a member follow-up. `fact_store_sale_line`,
+`fact_return_line` and `fact_seller_performance_snapshot` have no in-repo M1 build logic, so they are noted
+here rather than rebuilt blind.
+
+**Before → after row counts (Phase-B run, 15 Jun 2026; every delta 0, confirming grain-preserving
 corrections):**
 
 | Rebuilt fact | Before | After | Δ |
@@ -190,11 +234,12 @@ corrections):**
 
 All nine rebuilt facts pass their inline `assert_grain` (`COUNT(*) = COUNT(DISTINCT grain)`), and a second
 full Run-all reproduces these counts identically (idempotent). The zero deltas are the correctness proof:
-A1/A2/A4/A14/B1/B3 etc. re-value measures and set flags on existing rows — no row is added or deleted.
+A1, A2, A4, A14, B1, B3 and the rest re-value measures and set flags on existing rows, so no row is added
+or deleted.
 
 ---
 
-## Section 3 — Validation Outcomes  *(Owner: Lead)*
+## Section 3 — Validation Outcomes  *(Owner: Arif, Lead)*
 
 `sql/validation_suite.sql` runs 10 checks against `NEXAMART_GOLD` after every rebuild; each returns the
 offending rows (target 0, except Check 7 which expects ≥1 row per fact in the campaign window).
@@ -212,7 +257,7 @@ offending rows (target 0, except Check 7 which expects ≥1 row per fact in the 
 | 9 | Certainty segregation | no Finance view row is ESTIMATED while `is_confirmed_transaction<>FALSE`; the estimated view is 100% ESTIMATED |
 | 10 | Temporal consistency | no auto-correctable (≤72h) delivered-before-picked remains post-A14 (>72h rows flagged UNRELIABLE) |
 
-**Iteration log** *(from the Phase-B runs, 15 Jun 2026 — honest failure reporting is graded above an
+**Iteration log** *(from the Phase-B runs, 15 Jun 2026; honest failure reporting is graded above an
 implausible first-run pass):*
 
 | Iteration | Checks failed | Root cause | Fix applied | Re-run result |
@@ -228,21 +273,20 @@ delivered-before-picked remaining.
 
 ---
 
-## Section 4 — KPI Reconciliation Report  *(Owner: Lead)*
+## Section 4 — KPI Reconciliation Report  *(Owner: Arif, Lead)*
 
-The seven teams disagreed because each summed a **different measure on a different basis**. One trusted
-number — **Net Confirmed Revenue (NCR)** — is reached from Gross Sale Value (GSV) by a named, quantified
-waterfall (`NEXAMART_MARTS.vw_gsv`, `vw_ncr`, `vw_revenue_leakage`; method in
-`docs/reconciliation_method.md`).
+The seven teams disagreed because each summed a different measure on a different basis. The one trusted
+number, Net Confirmed Revenue (NCR), is reached from Gross Sale Value (GSV) through a named, quantified
+waterfall (`NEXAMART_MARTS.vw_gsv`, `vw_ncr`, `vw_revenue_leakage`).
 
 ### GSV → NCR waterfall (real figures, deployed views, run 15 Jun 2026)
 
-The two GSV→NCR deductions that the deployed `vw_gsv`/`vw_ncr` actually quantify are A1 cancelled EC
-revenue and POS line-level discounts (store NCR = `net_amount` = `gross_amount − discount_amount`). A2
-(payment-after-cancel) carries no extra ₹ — those payments sit on orders already zeroed by A1, and are held
-as a reversal *liability*, not revenue; A3 normalises POS to a tax-exclusive basis (a basis correction, not
-a ₹ line); B2's single partial refund (₹2.16 L) is recognised in the return period. All figures below are
-across the four in-scope phases (1 Jan – 14 Sep 2024).
+The deployed `vw_gsv`/`vw_ncr` quantify two GSV→NCR deductions: A1 cancelled EC revenue, and POS line-level
+discounts (store NCR = `net_amount` = `gross_amount − discount_amount`). A2 (payment-after-cancel) carries
+no extra ₹, because those payments sit on orders already zeroed by A1 and are held as a reversal *liability*
+rather than revenue. A3 normalises POS to a tax-exclusive basis, which is a basis correction rather than a ₹
+line, and B2's single partial refund (₹2.16 L) is recognised in the return period. All figures below span
+the four in-scope phases (1 Jan – 14 Sep 2024).
 
 ```
   Gross Sale Value (GSV, tax-exclusive, all confirmed channels)   ₹141.51 Cr   (₹1,415,087,895)
@@ -251,14 +295,14 @@ across the four in-scope phases (1 Jan – 14 Sep 2024).
   =  Net Confirmed Revenue (NCR)                                     ₹138.35 Cr  (₹1,383,506,490)  ← the trusted top-line
 ```
 
-Two leakages/measures are surfaced **separately**, never folded into NCR: platform **return refunds**
-(`vw_revenue_leakage`, RETURN_REFUND) = **₹0.65 Cr** (₹6,450,710, from `fact_return_line.refund_amount`),
-and **Estimated Classified GMV** (NexaLocal offline, `vw_estimated_classified_gmv`, ESTIMATED, ±35% band) =
-**₹1.26 Cr point** (₹12,603,544; band ₹0.82 Cr – ₹1.70 Cr). The latter is the B6-weighted estimate
-(SELLER_SOLD 0.60 / PHN_REVEAL 0.15 / CHAT 0.08 / OFFER_ACC 0.30 × listing `asking_price`); the **raw**
-seller-marked-sold value that A4 pulled out of *confirmed* GMV is ₹1.72 Cr (`SUM(asking_price)` of the 449
-SELLER_SOLD listings). Confirmed GMV (`vw_confirmed_gmv`, = NCR by construction) and Estimated Classified
-GMV are **reported separately and never added** — the single most common legacy double-count.
+Two further measures are surfaced separately and never folded into NCR. Platform return refunds
+(`vw_revenue_leakage`, RETURN_REFUND) come to ₹0.65 Cr (₹6,450,710, from `fact_return_line.refund_amount`),
+and Estimated Classified GMV (NexaLocal offline, `vw_estimated_classified_gmv`, ESTIMATED, ±35% band) is
+₹1.26 Cr at the point estimate (₹12,603,544; band ₹0.82 Cr – ₹1.70 Cr). That estimate is B6-weighted
+(SELLER_SOLD 0.60 / PHN_REVEAL 0.15 / CHAT 0.08 / OFFER_ACC 0.30 × listing `asking_price`); the raw
+seller-marked-sold value A4 pulled out of confirmed GMV is ₹1.72 Cr (`SUM(asking_price)` over the 449
+SELLER_SOLD listings). Confirmed GMV (`vw_confirmed_gmv`, equal to NCR by construction) and Estimated
+Classified GMV are reported separately and never added, which was the single most common legacy double-count.
 
 *Data note:* `cogs_amount` is unpopulated in the member-built sale facts, so `vw_gross_margin_by_channel` /
 `vw_net_margin_after_fulfilment` currently return margin = revenue (numerator = denominator); margin % is
@@ -293,23 +337,23 @@ confidence 0.85) is the INFERRED mechanism behind that lift. The data-backed cam
 
 ---
 
-## Section 5 — Campaign Performance Conclusion  *(Owner: Lead)*
+## Section 5 — Campaign Performance Conclusion  *(Owner: Arif, Lead)*
 
-**Position.** On a **certainty-segregated, anomaly-corrected basis the Back-to-School campaign was clearly
-positive.** Campaign-window confirmed revenue ran at **₹11.69M/day versus the ₹7.78M/day pre-ramp run-rate
-(+50%)** — and well above the longer baseline — with **+₹1.27 Cr EC incremental** confirmed revenue
-(`vw_campaign_incremental_revenue`: campaign ₹1.79 Cr vs a length-normalised baseline ₹0.52 Cr). The legacy
-**+34% Sales** headline was inflated by counting two things that are **not** confirmed revenue: cancelled
-EC orders (A1, ₹4.08M, now zeroed) and seller-marked-sold classified listings (A4, ₹1.72 Cr raw value, now
-relabelled ESTIMATED and reported only in the ±35% band — B6 point estimate ₹1.26 Cr). Removing that
-inflation is not opinion; it is 24 resolved anomalies. *(The brief's specific "+11% vs +34%" reference
-figures are scenario framing and are **not reproducible as growth rates** from this warehouse; the
-defensible, data-backed verdict is the clean positive uplift above, with the inflation explicitly
-segregated rather than a single contested percentage.)* Operational caveats — on-time delivery at 54%
-(`vw_on_time_delivery_rate`, 340/627) and the inventory snapshot-vs-ledger reconciliation residual (S3) —
-are conditions the campaign **exposed**, not caused.
+On a certainty-segregated, anomaly-corrected basis the Back-to-School campaign was clearly positive.
+Campaign-window confirmed revenue ran at ₹11.69M/day against the ₹7.78M/day pre-ramp run-rate, a +50% lift,
+and it sat well above the longer baseline too. In absolute terms that is +₹1.27 Cr of EC incremental
+confirmed revenue (`vw_campaign_incremental_revenue`: campaign ₹1.79 Cr vs a length-normalised baseline
+₹0.52 Cr). The legacy +34% Sales headline was inflated by counting two things that are not confirmed
+revenue: cancelled EC orders (A1, ₹4.08M, now zeroed) and seller-marked-sold classified listings (A4,
+₹1.72 Cr raw value, now relabelled ESTIMATED and reported only in the ±35% band, with a B6 point estimate
+of ₹1.26 Cr). Stripping out that inflation is not a judgement call; it follows directly from the 24 resolved
+anomalies. The brief's specific "+11% vs +34%" figures are scenario framing and do not reproduce as growth
+rates from this warehouse, so the defensible verdict is the clean positive uplift above, with the inflation
+kept separate rather than collapsed into one contested percentage. Two operational caveats remain: on-time
+delivery at 54% (`vw_on_time_delivery_rate`, 340/627) and the inventory snapshot-versus-ledger
+reconciliation residual (S3). Both are conditions the campaign exposed rather than caused.
 
-Each conclusion metric is reported **with its certainty level, never conflated** — ESTIMATED values are
+Each conclusion metric is reported with its certainty level and never conflated; ESTIMATED values are
 never summed into CONFIRMED totals:
 
 | Conclusion metric | Source view | Certainty | Reading (live, 15 Jun 2026) |
@@ -325,5 +369,5 @@ never summed into CONFIRMED totals:
 
 *Certainty discipline holds end-to-end:* validation Check 9 confirms 0 ESTIMATED rows leak into any
 confirmed Finance view and `vw_estimated_classified_gmv` is 100% ESTIMATED; Check 5 confirms no view sums
-ATP across dates. The ₹1.26 Cr estimated classified GMV is **never** added to the ₹138.35 Cr NCR — the two
+ATP across dates. The ₹1.26 Cr estimated classified GMV is never added to the ₹138.35 Cr NCR; the two
 sit in different certainty bands by design.
