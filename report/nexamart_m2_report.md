@@ -7,8 +7,11 @@
 | Member | Deliverables |
 |---|---|
 | Arif (Lead) | Anomaly resolution (§1), Gold rebuild (§2), Validation suite (§3), KPI views & reconciliation (§4), Campaign conclusion (§5), warehouse infrastructure & report assembly |
-| Hamza, Asad, Khallad | Stakeholder dashboard — all 5 pages |
+| Asad, Khallad | Stakeholder dashboard: Sales by Channel, Inventory Health, Customer Journey, and NexaLocal & Seller Quality pages |
+| Hamza | Stakeholder dashboard: Executive Summary page (in progress) |
 | Sameen Fatima, Azhar Sajjad | Executive presentation slides |
+
+*Dashboard status: the submitted `nexamart_dashboard.pbix` covers the Sales, Inventory Health, Customer Journey, and NexaLocal & Seller Quality pages, plus the clickstream funnel. The Executive Summary page (the GSV → NCR waterfall and revenue-leakage breakdown) is being finalised and will be published to the project repository linked in `01-repo-link.txt`.*
 
 ---
 
